@@ -159,3 +159,16 @@ def get_state():
     env = get_env()
     obs = env.get_global_state()
     return _obs_to_dict(obs)
+
+def main():
+    """Main entry point for the server."""
+    import uvicorn
+    uvicorn.run(
+        "server.app:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=False
+    )
+
+if __name__ == "__main__":
+    main()
