@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 import sys
@@ -19,6 +19,14 @@ from server.cloudscale_RL_environment import CloudAutoScalerEnv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Import the dashboard for integration
+try:
+    from dashboard import dashboard_app
+    DASHBOARD_AVAILABLE = True
+except ImportError:
+    DASHBOARD_AVAILABLE = False
+    logger.warning("Dashboard not available - run from project root to enable /dashboard endpoint")
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -35,6 +43,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount Gradio dashboard if available
+if DASHBOARD_AVAILABLE:
+    import gradio as gr
+    gr.mount_gradio_app(app, dashboard_app, path="/dashboard")
+    logger.info("Dashboard mounted at /dashboard")
 
 # ---------------------------------------------------------------------------
 # Web Dashboard HTML
@@ -515,15 +529,19 @@ def _reward_to_dict(rewards_dict: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Web Dashboard Routes
 # ---------------------------------------------------------------------------
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def root():
-    """Serve the web dashboard at the root URL."""
-    return HTML_DASHBOARD
+    """Redirect to the mounted dashboard endpoint."""
+    if DASHBOARD_AVAILABLE:
+        return RedirectResponse(url="/dashboard/", status_code=307)
+    return HTMLResponse(HTML_DASHBOARD)
 
-@app.get("/web", response_class=HTMLResponse)
+@app.get("/web")
 async def web():
     """Alternative web endpoint for HF Space compatibility."""
-    return HTML_DASHBOARD
+    if DASHBOARD_AVAILABLE:
+        return RedirectResponse(url="/dashboard/", status_code=307)
+    return HTMLResponse(HTML_DASHBOARD)
 
 # ---------------------------------------------------------------------------
 # API Endpoints

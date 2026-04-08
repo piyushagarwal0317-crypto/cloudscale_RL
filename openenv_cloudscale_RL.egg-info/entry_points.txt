@@ -1,0 +1,2 @@
+[console_scripts]
+server = cloudscale_RL.server.app:main

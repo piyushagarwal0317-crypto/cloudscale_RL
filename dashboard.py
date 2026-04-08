@@ -48,8 +48,18 @@ def _simulation_loop():
     while True:
         time.sleep(1.0) # 1 tick per second for live demo purposes
         
-        # Simulated baseline agent that does nothing, forcing the system to react to spikes.
-        actions = {"frontend": "NO_OP", "backend": "NO_OP", "worker": "NO_OP"}
+        # Simple reactive scaling: scale up if utilization > 0.8, down if < 0.4
+        actions = {}
+        obs = _env.get_global_state()  # Get current state before stepping
+        for svc_name in ["frontend", "backend", "worker"]:
+            util = obs[svc_name]["utilization"]
+            if util > 0.8:
+                actions[svc_name] = "SCALE_UP"
+            elif util < 0.4:
+                actions[svc_name] = "SCALE_DOWN"
+            else:
+                actions[svc_name] = "NO_OP"
+        
         step_result = _env.step(actions)
         obs = step_result.observations
         done = step_result.done
@@ -151,6 +161,32 @@ def _build_cluster_html() -> str:
         """
         html += card
         
+    # Add global spike status
+    spike_active = "YES" if _env._spike_active else "NO"
+    spike_factor = f"{_env._spike_factor * 100:.0f}%" if _env._spike_active else "N/A"
+    spike_color = "#EF4444" if _env._spike_active else "#10B981"
+    
+    spike_card = f"""
+    <div style="background:#111827; border: 1px solid #1F2937; border-top: 4px solid {spike_color}; 
+                border-radius: 8px; padding: 20px; width: 30%; min-width: 250px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-top: 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+            <h3 style="color:#F3F4F6; margin:0; font-family:monospace; font-size:1.2rem; text-transform:uppercase;">
+                &#9889; SPIKE STATUS
+            </h3>
+            <span style="background:{spike_color}22; color:{spike_color}; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">
+                {spike_active}
+            </span>
+        </div>
+        
+        <div style="display:grid; grid-template-columns: 1fr; gap: 12px;">
+            <div>
+                <div style="color:#9CA3AF; font-size:0.75rem;">CURRENT SPIKE FACTOR</div>
+                <div style="color:#F3F4F6; font-size:1.5rem; font-weight:bold; font-family:monospace;">{spike_factor}</div>
+            </div>
+        </div>
+    </div>"""
+    
+    html += spike_card
     html += '</div>'
     return html
 
@@ -200,8 +236,11 @@ def _build_telemetry_charts():
 # ---------------------------------------------------------------------------
 def _trigger_flash_spike():
     """Manual override to force the workload generator to spike."""
+    import random
     _env._spike_active = True
-    return "🔥 FLASH SPIKE INJECTED: Traffic increasing 400%!"
+    _env._spike_factor = random.uniform(0, 5.0)
+    factor_percent = _env._spike_factor * 100
+    return f"🔥 FLASH SPIKE INJECTED: Traffic increasing {factor_percent:.0f}%!"
 
 def _reset_environment():
     _env.reset()
@@ -261,4 +300,15 @@ with gr.Blocks(title="CloudScale Autoscaler Dashboard", css=CYBER_CLOUD_CSS) as 
     timer.tick(fn=_build_telemetry_charts, outputs=[rps_chart, lat_chart])
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7861)
+    import sys
+    share = "--share" in sys.argv
+    print("🚀 Starting CloudScale Autoscaler Dashboard...")
+    print("📊 Dashboard will be available at: http://localhost:7861")
+    print("🌐 If running in VS Code, it should open automatically")
+    print("💡 If not, manually open: http://localhost:7861 in your browser")
+    if share:
+        print("🔗 Creating public link...")
+    demo.launch(server_name="0.0.0.0", server_port=7861, share=share)
+else:
+    # Export demo for integration with FastAPI
+    dashboard_app = demo
