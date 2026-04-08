@@ -4,6 +4,7 @@ MANDATORY: Must run in the root of your project.
 """
 import asyncio
 import os
+import sys
 import json
 import textwrap
 import aiohttp
@@ -14,13 +15,24 @@ from openai import OpenAI
 # ---------------------------------------------------------------------------
 # Configuration & Environment Variables
 # ---------------------------------------------------------------------------
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+
+def get_api_key() -> str:
+    token = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+    if not token:
+        raise SystemExit(
+            "Missing required environment variable 'HF_TOKEN' or 'API_KEY'. "
+            "Please set this variable before running inference.py."
+        )
+    return token
+
+HF_TOKEN = get_api_key()
+API_KEY = HF_TOKEN
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 
 # Point this to your Hugging Face Space URL or Localhost
 ENV_URL = os.getenv("ENV_URL", "http://localhost:8000")
-TASK_NAME = os.getenv("TASK_LEVEL", "medium") # "easy", "medium", or "hard"
+TASK_NAME = os.getenv("TASK_LEVEL", "medium")  # "easy", "medium", or "hard"
 BENCHMARK = "cloudscale_rl"
 
 MAX_STEPS = 200
@@ -50,19 +62,23 @@ SYSTEM_PROMPT = textwrap.dedent(
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
+def sanitize_action(action: str) -> str:
+    return action.replace("\n", " ").replace("\r", " ").replace('"', "'").strip()
+
+
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    action_str = sanitize_action(action)
     error_val = error if error else "null"
     done_val = str(done).lower()
-    # Replace quotes in action string to prevent breaking the log parser
-    safe_action = action.replace('"', "'")
     print(
-        f"[STEP] step={step} action={safe_action} reward={reward:.2f} done={done_val} error={error_val}",
+        f"[STEP] step={step} action={action_str} reward={reward:.2f} done={done_val} error={error_val}",
         flush=True,
     )
 
+
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
 
 # ---------------------------------------------------------------------------
 # LLM Interaction
@@ -107,7 +123,7 @@ def get_model_action(client: OpenAI, step: int, obs: Dict[str, Any]) -> tuple[Di
                 
         return action_dict, raw_text
     except Exception as exc:
-        print(f"[DEBUG] Model request/parsing failed: {exc}. Raw output: {raw_text}", flush=True)
+        print(f"[DEBUG] Model request/parsing failed: {exc}. Raw output: {raw_text}", file=sys.stderr, flush=True)
         # Fallback to safe NO_OPs to keep simulation running
         safe_action = {"frontend": "NO_OP", "backend": "NO_OP", "worker": "NO_OP"}
         return safe_action, json.dumps(safe_action)

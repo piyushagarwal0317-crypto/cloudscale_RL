@@ -668,6 +668,21 @@ curl https://your-username-cloudscale-rl.hf.space/health
 
 ---
 
+## Required Environment Variables
+
+Before running inference or validation, ensure the following environment variables are defined:
+
+```bash
+export HF_TOKEN="your_hf_token"
+export API_BASE_URL="https://router.huggingface.co/v1"
+export MODEL_NAME="<your-model-identifier>"
+export ENV_URL="https://bitmain-cloud-scale-rl.hf.space"
+```
+
+`inference.py` must be executed from the repository root and will use these variables to run the LLM evaluation.
+
+---
+
 ## Validation Script
 
 Use the provided validation script to verify your setup:

@@ -154,9 +154,45 @@ else
   stop_at "Step 3"
 fi
 
+log "${BOLD}Step 4/4: Running inference script${NC} ..."
+
+if ! command -v python &>/dev/null; then
+  fail "python command not found"
+  hint "Install Python 3 and make sure it is available as 'python'."
+  stop_at "Step 4"
+fi
+
+REQUIRED_ENV_VARS=(HF_TOKEN API_BASE_URL MODEL_NAME)
+for var in "${REQUIRED_ENV_VARS[@]}"; do
+  if [ -z "${!var:-}" ]; then
+    fail "Required environment variable $var is not defined"
+    hint "Export $var before running this script. Example: export $var=your_value"
+    stop_at "Step 4"
+  fi
+done
+
+INFERENCE_ENV_URL="${ENV_URL:-$PING_URL}"
+
+INFERENCE_OUTPUT=$(run_with_timeout "$DOCKER_BUILD_TIMEOUT" env HF_TOKEN="$HF_TOKEN" API_BASE_URL="$API_BASE_URL" MODEL_NAME="$MODEL_NAME" ENV_URL="$INFERENCE_ENV_URL" python inference.py 2>&1)
+INFERENCE_OK=$?
+
+if [ "$INFERENCE_OK" -eq 0 ]; then
+  if printf "%s\n" "$INFERENCE_OUTPUT" | grep -q '^\[START\]' && printf "%s\n" "$INFERENCE_OUTPUT" | grep -q '^\[END\]'; then
+    pass "Inference script completed successfully and emitted structured logs"
+  else
+    fail "Inference script did not emit the required structured [START]/[END] logs"
+    printf "%s\n" "$INFERENCE_OUTPUT" | tail -20
+    stop_at "Step 4"
+  fi
+else
+  fail "Inference script failed to run successfully"
+  printf "%s\n" "$INFERENCE_OUTPUT" | tail -40
+  stop_at "Step 4"
+fi
+
 printf "\n"
 printf "${BOLD}========================================${NC}\n"
-printf "${GREEN}${BOLD}  All 3/3 checks passed!${NC}\n"
+printf "${GREEN}${BOLD}  All 4/4 checks passed!${NC}\n"
 printf "${GREEN}${BOLD}  Your submission is ready to submit.${NC}\n"
 printf "${BOLD}========================================${NC}\n"
 printf "\n"
