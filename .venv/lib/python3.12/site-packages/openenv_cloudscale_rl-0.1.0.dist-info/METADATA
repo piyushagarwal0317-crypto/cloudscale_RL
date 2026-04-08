@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: openenv-cloudscale_RL
+Version: 0.1.0
+Summary: Cloudscale Rl environment for OpenEnv with LLM multi-agent orchestration
+Requires-Python: >=3.10
+Requires-Dist: openenv-core[core]>=0.2.2
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: gradio>=4.0.0
+Requires-Dist: matplotlib>=3.7.0
+Requires-Dist: anthropic>=0.18.0
+Requires-Dist: requests>=2.31.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"

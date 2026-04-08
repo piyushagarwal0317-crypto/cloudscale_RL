@@ -300,4 +300,15 @@ with gr.Blocks(title="CloudScale Autoscaler Dashboard", css=CYBER_CLOUD_CSS) as 
     timer.tick(fn=_build_telemetry_charts, outputs=[rps_chart, lat_chart])
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7861)
+    import sys
+    share = "--share" in sys.argv
+    print("🚀 Starting CloudScale Autoscaler Dashboard...")
+    print("📊 Dashboard will be available at: http://localhost:7861")
+    print("🌐 If running in VS Code, it should open automatically")
+    print("💡 If not, manually open: http://localhost:7861 in your browser")
+    if share:
+        print("🔗 Creating public link...")
+    demo.launch(server_name="0.0.0.0", server_port=7861, share=share)
+else:
+    # Export demo for integration with FastAPI
+    dashboard_app = demo

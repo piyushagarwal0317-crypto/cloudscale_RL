@@ -60,6 +60,28 @@ async def main():
 asyncio.run(main())
 ```
 
+### Option 4: Interactive Dashboard
+
+```bash
+# Start the server (includes integrated dashboard)
+cd /path/to/cloudscale_RL
+uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
+
+# Access the interactive dashboard at: http://localhost:8000/dashboard/
+# The dashboard shows:
+# - Real-time cluster status (pods, CPU, latency)
+# - Live telemetry charts (RPS, latency over time)
+# - Manual spike injection controls
+# - Reactive autoscaling simulation
+```
+
+**Alternative: Standalone Dashboard**
+```bash
+# Run dashboard separately (if needed)
+python dashboard.py
+# Then visit: http://localhost:7861
+```
+
 ## Environment Overview
 
 ### What is CloudScale RL?
@@ -426,6 +448,22 @@ python supervised_training.py
 ## API Reference
 
 ### REST Endpoints
+
+#### 0. Interactive Dashboard
+
+```
+GET /dashboard/
+```
+
+**Description**: Access the interactive Gradio dashboard for real-time monitoring and control of the autoscaling environment.
+
+**Features**:
+- Live cluster status (pods, CPU utilization, latency)
+- Real-time telemetry charts (RPS, latency over time)
+- Manual traffic spike injection
+- Reactive autoscaling simulation
+
+**Usage**: Open `http://localhost:8000/dashboard/` in your browser after starting the server.
 
 #### 1. Reset Environment
 
@@ -868,7 +906,7 @@ cloudscale_RL/
 ├── client.py                      # Python client for environment
 ├── analyzer.py                    # Training analysis utilities
 ├── monitor.py                     # Performance monitoring
-├── dashboard.py                   # Web dashboard (if using Gradio)
+├── dashboard.py                   # Interactive Gradio dashboard (integrated at /dashboard)
 │
 └── server/                        # FastAPI Server
     ├── __init__.py
@@ -886,6 +924,7 @@ cloudscale_RL/
 ### `server/app.py`
 Main FastAPI application with:
 - REST endpoints: `/reset`, `/step`, `/health`, `/state`
+- Interactive dashboard at `/dashboard` (integrated Gradio interface)
 - Web interface at `/docs` and `/web`
 - Score clamping to [0.01, 0.99] for validator compliance
 - Environment management and session handling
