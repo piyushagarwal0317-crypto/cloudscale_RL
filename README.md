@@ -966,6 +966,83 @@ python inference.py --url http://localhost:8000 --episodes 3 --verbose
 
 
 
+---
+
+## Future Roadmap & Planned Improvements
+
+### 🤖 Fine-Tuned LLM for Intelligent Reasoning (Planned)
+
+**Current State**: The dashboard and environment currently use hardcoded scaling logic based on utilization thresholds:
+- Scale up when CPU utilization > 80%
+- Scale down when CPU utilization < 40%
+
+**Future Vision**: 
+Replace the hardcoded heuristics with a fine-tuned LLM that performs intelligent reasoning and decision-making. This will enable:
+
+1. **Context-Aware Scaling Decisions**
+   - Understand complex traffic patterns beyond simple thresholds
+   - Anticipate spikes based on historical trends and anomalies
+   - Optimize for multi-objective goals (cost vs. performance vs. stability)
+
+2. **Natural Language Reasoning**
+   - Generate human-readable explanations for scaling actions
+   - Learn from diverse cloud infrastructure scenarios
+   - Adapt to custom business logic and SLA requirements
+
+3. **Adaptive Learning**
+   - Learn from feedback on scaling decision quality
+   - Improve over time with accumulated environment interactions
+   - Handle edge cases and novel traffic patterns
+
+**Implementation Plan**:
+```
+Phase 1 (Q2 2026): Data Collection
+├── Collect scaling decision trajectories from RL agents
+├── Annotate with expert reasoning and insights
+└── Build high-quality training dataset of 10K+ examples
+
+Phase 2 (Q3 2026): Model Fine-Tuning
+├── Select base model (Llama 2, Mistral, or similar)
+├── Fine-tune on cloud scaling reasoning tasks
+├── Implement reasoning head for action generation
+└── Validate on held-out test scenarios
+
+Phase 3 (Q4 2026): Integration
+├── Replace hardcoded logic with LLM-based reasoning
+├── Add inference serving layer
+├── Implement caching for latency optimization
+└── Performance benchmarking vs. hardcoded baseline
+
+Phase 4 (Q1 2027): Production Deployment
+├── Scale inference infrastructure
+├── Implement fallback to hardcoded logic
+├── Monitor LLM decision quality in production
+└── Continuous improvement via RLHF
+```
+
+**Resource Constraints**:
+Currently, implementing a fine-tuned LLM is not feasible due to:
+- **Computational Resources**: Requires GPU clusters (H100s/A100s) for training
+- **Data Labeling**: Requires domain expert annotation for high-quality training data
+- **Inference Cost**: Real-time LLM inference requires substantial infrastructure
+
+**Workaround**: The current hardcoded scaling logic serves as a placeholder with clear extensibility points:
+- `dashboard.py::_simulation_loop()` - Agent action selection
+- `server/app.py` - Environment API endpoints
+- `oversight_agent.py` - Decision reasoning module
+
+These can be replaced with LLM calls once resources are available.
+
+### Additional Planned Features
+
+- **Multi-Agent Hierarchical Control**: Coordination between different scaling agents
+- **Cost Optimization**: Dynamic pricing integration with cloud providers
+- **Predictive Maintenance**: Anticipate pod failures and performance degradation
+- **Custom SLA Support**: User-defined service level agreements
+- **Benchmarking Suite**: Comprehensive comparison of scaling strategies
+
+---
+
 ## Support & Contact
 
 - 📧 **Issues**: GitHub Issues
@@ -975,6 +1052,7 @@ python inference.py --url http://localhost:8000 --episodes 3 --verbose
 
 ---
 
-**Last Updated**: April 8, 2024  
-**Version**: 1.0.0  
-**Status**: Production Ready ✅
+**Last Updated**: April 8, 2026  
+**Version**: 1.1.0  
+**Status**: Production Ready ✅  
+**Next Phase**: Fine-Tuned LLM Integration (Pending Resources)

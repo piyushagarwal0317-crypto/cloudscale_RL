@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 import uuid
+import random
 import logging
 from typing import Dict, Any, List
 
@@ -79,7 +80,7 @@ class CloudAutoScalerEnv:
             self.spike_prob = 0.10     # Frequent flash spikes
             self.pod_startup_delay = 5 # Severe cloud boot delays (requires anticipation)
         else: # medium
-            self.base_load = 500
+            self.base_load = 150
             self.spike_prob = 0.05     # Standard spikes
             self.pod_startup_delay = 3 # Standard delay
 
@@ -95,6 +96,7 @@ class CloudAutoScalerEnv:
         self._event_queue: List[Dict] = []  # Handles delayed scaling actions
         self._historical_rps: List[float] = []
         self._spike_active = False
+        self._spike_factor = 1.0
 
     # ------------------------------------------------------------------
     # OpenEnv Interface
@@ -105,6 +107,7 @@ class CloudAutoScalerEnv:
         self._event_queue.clear()
         self._historical_rps = [self.base_load] * 5
         self._spike_active = False
+        self._spike_factor = 1.0
         
         # Initialize microservices with baseline capacities
         self.services = {
@@ -208,10 +211,11 @@ class CloudAutoScalerEnv:
         # Simple spike logic for demonstration
         if not self._spike_active and (uuid.uuid4().int % 100) < (self.spike_prob * 100):
             self._spike_active = True
+            self._spike_factor = random.uniform(0, 5.0)
             self.stats.active_spikes += 1
             
         if self._spike_active:
-            current_rps = base * 4.0 # 400% traffic spike
+            current_rps = base * self._spike_factor  # random traffic spike between 0% and 500%
             # Random chance to end spike
             if (uuid.uuid4().int % 100) < 15: 
                 self._spike_active = False
