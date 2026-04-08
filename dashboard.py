@@ -43,23 +43,33 @@ _time_history = deque(maxlen=60)
 _rps_history = deque(maxlen=60)
 _latency_history = {"frontend": deque(maxlen=60), "backend": deque(maxlen=60), "worker": deque(maxlen=60)}
 
+def _autoscale_actions(obs: Dict[str, Dict[str, float]]) -> Dict[str, str]:
+    """Simple heuristic autoscaler so pods and utilization react to spike intensity."""
+    actions: Dict[str, str] = {}
+    spike_pct = float(obs.get("frontend", {}).get("spike_percentage", 0.0))
+
+    for svc_name, metrics in obs.items():
+        svc = _env.services[svc_name]
+        util = float(metrics.get("utilization", 0.0))
+        queue_depth = float(metrics.get("queue_depth", 0.0))
+
+        if (spike_pct >= 100.0 or util > 0.85 or queue_depth > 10.0) and (svc.active_pods + svc.pending_pods < svc.max_replicas):
+            actions[svc_name] = "SCALE_UP"
+        elif spike_pct < 25.0 and util < 0.35 and queue_depth < 1.0 and svc.active_pods > svc.min_replicas:
+            actions[svc_name] = "SCALE_DOWN"
+        else:
+            actions[svc_name] = "NO_OP"
+
+    return actions
+
 def _simulation_loop():
     """Background thread: Steps the environment automatically to generate live data."""
     while True:
         time.sleep(1.0) # 1 tick per second for live demo purposes
-        
-        # Simple reactive scaling: scale up if utilization > 0.8, down if < 0.4
-        actions = {}
-        obs = _env.get_global_state()  # Get current state before stepping
-        for svc_name in ["frontend", "backend", "worker"]:
-            util = obs[svc_name]["utilization"]
-            if util > 0.8:
-                actions[svc_name] = "SCALE_UP"
-            elif util < 0.4:
-                actions[svc_name] = "SCALE_DOWN"
-            else:
-                actions[svc_name] = "NO_OP"
-        
+
+        # Apply a simple autoscaling controller so pods react to spike intensity and utilization.
+        current_obs = _env.get_global_state()
+        actions = _autoscale_actions(current_obs)
         step_result = _env.step(actions)
         obs = step_result.observations
         done = step_result.done
@@ -111,8 +121,22 @@ def _style_ax(ax, title=""):
 # ---------------------------------------------------------------------------
 def _build_cluster_html() -> str:
     obs = _env.get_global_state()
+    spike_pct = float(obs.get("frontend", {}).get("spike_percentage", 0.0))
+    spike_label = "ACTIVE" if spike_pct > 0 else "IDLE"
+    spike_color = "#F59E0B" if spike_pct > 0 else "#00E676"
     
-    html = '<div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">'
+    html = f'''
+    <div style="display:flex; justify-content:center; margin-bottom:16px;">
+        <div style="background:#111827; border:1px solid #1F2937; border-top:4px solid {spike_color};
+                    border-radius:8px; padding:16px 24px; min-width:260px; text-align:center;
+                    box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+            <div style="color:#9CA3AF; font-size:0.75rem; letter-spacing:1px;">SPIKES</div>
+            <div style="color:{spike_color}; font-size:1.8rem; font-weight:bold; font-family:monospace;">{spike_pct:.1f}%</div>
+            <div style="color:#E5E7EB; font-size:0.8rem; font-family:monospace;">{spike_label}</div>
+        </div>
+    </div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+    '''
     
     for svc_name, metrics in obs.items():
         # Convert normalized metrics back for display
@@ -163,7 +187,7 @@ def _build_cluster_html() -> str:
         
     # Add global spike status
     spike_active = "YES" if _env._spike_active else "NO"
-    spike_factor = f"{_env._spike_factor * 100:.0f}%" if _env._spike_active else "N/A"
+    spike_factor = f"{_env._current_spike_percentage:.1f}%" if _env._spike_active else "N/A"
     spike_color = "#EF4444" if _env._spike_active else "#10B981"
     
     spike_card = f"""
@@ -180,7 +204,7 @@ def _build_cluster_html() -> str:
         
         <div style="display:grid; grid-template-columns: 1fr; gap: 12px;">
             <div>
-                <div style="color:#9CA3AF; font-size:0.75rem;">CURRENT SPIKE FACTOR</div>
+                <div style="color:#9CA3AF; font-size:0.75rem;">CURRENT SPIKE VALUE</div>
                 <div style="color:#F3F4F6; font-size:1.5rem; font-weight:bold; font-family:monospace;">{spike_factor}</div>
             </div>
         </div>
@@ -236,11 +260,8 @@ def _build_telemetry_charts():
 # ---------------------------------------------------------------------------
 def _trigger_flash_spike():
     """Manual override to force the workload generator to spike."""
-    import random
-    _env._spike_active = True
-    _env._spike_factor = random.uniform(0, 5.0)
-    factor_percent = _env._spike_factor * 100
-    return f"🔥 FLASH SPIKE INJECTED: Traffic increasing {factor_percent:.0f}%!"
+    spike_pct = _env.inject_spike()
+    return f"🔥 FLASH SPIKE INJECTED: Traffic set to {spike_pct:.1f}%"
 
 def _reset_environment():
     _env.reset()

@@ -96,7 +96,7 @@ class CloudAutoScalerEnv:
         self._event_queue: List[Dict] = []  # Handles delayed scaling actions
         self._historical_rps: List[float] = []
         self._spike_active = False
-        self._spike_factor = 1.0
+        self._current_spike_percentage = 0.0
 
     # ------------------------------------------------------------------
     # OpenEnv Interface
@@ -107,7 +107,7 @@ class CloudAutoScalerEnv:
         self._event_queue.clear()
         self._historical_rps = [self.base_load] * 5
         self._spike_active = False
-        self._spike_factor = 1.0
+        self._current_spike_percentage = 0.0
         
         # Initialize microservices with baseline capacities
         self.services = {
@@ -163,13 +163,24 @@ class CloudAutoScalerEnv:
                 "error_rate": svc.metrics["error_rate"],
                 "queue_depth": svc.queue_depth,
                 "utilization": svc.metrics["utilization"],
-                "spike_detected": 1.0 if self._spike_active else 0.0
+                "spike_detected": 1.0 if self._spike_active else 0.0,
+                "spike_percentage": self._current_spike_percentage if self._spike_active else 0.0
             }
         return obs
 
     def state(self) -> Dict[str, Any]:
         """OpenEnv standard alias for getting the current state."""
         return self.get_global_state()
+
+    def inject_spike(self, spike_percentage: float | None = None) -> float:
+        """Force-activates a spike and returns the selected spike percentage."""
+        if spike_percentage is None:
+            spike_percentage = random.uniform(0.0, 500.0)
+
+        self._current_spike_percentage = max(0.0, min(500.0, float(spike_percentage)))
+        self._spike_active = True
+        self.stats.active_spikes += 1
+        return self._current_spike_percentage
 
     # ------------------------------------------------------------------
     # Internal Simulation Mechanics
@@ -211,14 +222,15 @@ class CloudAutoScalerEnv:
         # Simple spike logic for demonstration
         if not self._spike_active and (uuid.uuid4().int % 100) < (self.spike_prob * 100):
             self._spike_active = True
-            self._spike_factor = random.uniform(0, 5.0)
+            self._current_spike_percentage = random.uniform(0.0, 500.0)
             self.stats.active_spikes += 1
             
         if self._spike_active:
-            current_rps = base * self._spike_factor  # random traffic spike between 0% and 500%
+            current_rps = base * (self._current_spike_percentage / 100.0)
             # Random chance to end spike
             if (uuid.uuid4().int % 100) < 15: 
                 self._spike_active = False
+                self._current_spike_percentage = 0.0
         else:
             # Normal noisy diurnal load
             current_rps = base + (uuid.uuid4().int % 50) - 25
