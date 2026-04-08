@@ -963,41 +963,8 @@ python -m pytest tests/
 python inference.py --url http://localhost:8000 --episodes 3 --verbose
 ```
 
----
 
-## Contributing
 
-Contributions welcome! Areas of improvement:
-
-1. **Agents**: Implement new training algorithms
-2. **Environments**: Add more task variations
-3. **Documentation**: Improve guides and examples
-4. **Performance**: Optimize inference speed
-
-See `CONTRIBUTING.md` for guidelines.
-
----
-
-## License
-
-MIT License - See LICENSE file for details
-
----
-
-## Citation
-
-If you use CloudScale RL in your research, please cite:
-
-```bibtex
-@misc{cloudscale_rl_2024,
-  title = {CloudScale RL: Reinforcement Learning for Cloud Infrastructure Autoscaling},
-  author = {Your Name},
-  year = {2024},
-  howpublished = {\url{https://huggingface.co/spaces/bitmain/CLOUD_SCALE_RL}}
-}
-```
-
----
 
 ## Support & Contact
 
