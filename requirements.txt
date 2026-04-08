@@ -1,0 +1,28 @@
+# ── Core Framework & API ──────────────────────────────────────────────────────
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+pydantic>=2.0.0
+
+# ── Cloud Ops Dashboard ───────────────────────────────────────────────────────
+gradio>=4.0.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+numpy>=1.24.0
+
+# ── Telemetry & HTTP Client (OpenEnv Fallback) ────────────────────────────────
+requests>=2.28.0
+
+# ── Autonomous SRE Agents (LLM API) ───────────────────────────────────────────
+# Optional — falls back to local Ollama or deterministic rule engine if no key
+anthropic>=0.25.0
+
+# ── RL Training (GRPO for Cloud Autoscaler) ───────────────────────────────────
+# Required for running train_autoscaler.py
+trl>=0.8.0
+transformers>=4.40.0
+datasets>=2.14.0
+accelerate>=0.27.0
+torch>=2.2.0
+
+# ── OpenEnv Framework ─────────────────────────────────────────────────────────
+# openenv-core>=0.2.1  # Uncomment if the hackathon provides a dedicated pip package
