@@ -16,19 +16,28 @@ from openai import OpenAI
 # Configuration & Environment Variables
 # ---------------------------------------------------------------------------
 
-def get_api_key() -> str:
-    token = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+def get_hf_token() -> str:
+    token = os.getenv("HF_TOKEN", "").strip()
     if not token:
         raise SystemExit(
-            "Missing required environment variable 'HF_TOKEN' or 'API_KEY'. "
+            "Missing required environment variable 'HF_TOKEN'. "
             "Please set this variable before running inference.py."
         )
     return token
 
-HF_TOKEN = get_api_key()
-API_KEY = HF_TOKEN
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
+
+def get_required_env(var_name: str, purpose: str) -> str:
+    value = os.getenv(var_name, "").strip()
+    if not value:
+        raise SystemExit(
+            f"Missing required environment variable '{var_name}'. "
+            f"{purpose} Please set this variable before running inference.py."
+        )
+    return value
+
+HF_TOKEN = get_hf_token()
+API_BASE_URL = get_required_env("API_BASE_URL", "This variable must point to your LLM API endpoint.")
+MODEL_NAME = get_required_env("MODEL_NAME", "This variable must define the model identifier for inference.")
 
 # Point this to your Hugging Face Space URL or Localhost
 ENV_URL = os.getenv("ENV_URL", "http://localhost:8000")
@@ -152,7 +161,7 @@ class CloudEnvClient:
 # Main Evaluation Loop
 # ---------------------------------------------------------------------------
 async def main() -> None:
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
     env = CloudEnvClient(ENV_URL)
 
     rewards: List[float] = []
@@ -201,7 +210,7 @@ async def main() -> None:
         try:
             await env.close()
         except Exception as e:
-            print(f"[DEBUG] env.close() error: {e}", flush=True)
+            print(f"[DEBUG] env.close() error: {e}", file=sys.stderr, flush=True)
             
         # 5. Log End
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)

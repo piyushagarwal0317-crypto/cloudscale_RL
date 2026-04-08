@@ -27,10 +27,9 @@ services:
     environment:
       - ENV_URL=http://cloudscale-rl:8000
       - TASK_LEVEL=medium
-      - MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
-      # Add your API keys here
+      - API_BASE_URL=${API_BASE_URL}
+      - MODEL_NAME=${MODEL_NAME}
       - HF_TOKEN=${HF_TOKEN}
-      - API_KEY=${API_KEY}
     command: ["python", "inference.py"]
     profiles:
       - inference  # Only run when explicitly requested with --profile inference
