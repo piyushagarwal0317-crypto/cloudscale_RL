@@ -29,24 +29,16 @@ class CloudscaleRlEnv(
         >>> # Connect to a running server
         >>> with CloudscaleRlEnv(base_url="http://localhost:8000") as client:
         ...     result = client.reset()
-        ...     print(result.observation.echoed_message)
+        ...     print(result.observation.frontend.utilization)
         ...
-        ...     result = client.step(CloudscaleRlAction(message="Hello!"))
-        ...     print(result.observation.echoed_message)
-
-    Example with Docker:
-        >>> # Automatically start container and connect
-        >>> client = CloudscaleRlEnv.from_docker_image("cloudscale_RL-env:latest")
-        >>> try:
-        ...     result = client.reset()
-        ...     result = client.step(CloudscaleRlAction(message="Test"))
-        ... finally:
-        ...     client.close()
+        ...     result = client.step(CloudscaleRlAction(actions={"frontend": "SCALE_UP", "backend": "NO_OP", "worker": "NO_OP"}))
+        ...     print(result.observation.frontend.active_pods)
     """
 
     def _step_payload(self, action: CloudscaleRlAction) -> Dict:
         """
         Convert CloudscaleRlAction to JSON payload for step message.
+        Maps to the `StepRequest` Pydantic model in app.py.
 
         Args:
             action: CloudscaleRlAction instance
@@ -55,7 +47,8 @@ class CloudscaleRlEnv(
             Dictionary representation suitable for JSON encoding
         """
         return {
-            "message": action.message,
+            # Assuming CloudscaleRlAction has an `actions` dictionary attribute
+            "actions": action.actions,
         }
 
     def _parse_result(self, payload: Dict) -> StepResult[CloudscaleRlObservation]:
@@ -63,23 +56,26 @@ class CloudscaleRlEnv(
         Parse server response into StepResult[CloudscaleRlObservation].
 
         Args:
-            payload: JSON response data from server
+            payload: JSON response data from server containing observation, rewards, done, info
 
         Returns:
             StepResult with CloudscaleRlObservation
         """
         obs_data = payload.get("observation", {})
-        observation = CloudscaleRlObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
-            done=payload.get("done", False),
-            reward=payload.get("reward"),
-            metadata=obs_data.get("metadata", {}),
-        )
+        
+        # Pass the observation dictionary directly to the observation model.
+        # This assumes your models.py `CloudscaleRlObservation` is structured to 
+        # accept the dictionary of services (frontend, backend, worker).
+        observation = CloudscaleRlObservation(**obs_data)
+
+        # The hackathon validator usually expects a single float for the reward.
+        # We will aggregate the total rewards across all microservices.
+        rewards_data = payload.get("rewards", {})
+        total_aggregate_reward = sum(r.get("total", 0.0) for r in rewards_data.values()) if rewards_data else 0.0
 
         return StepResult(
             observation=observation,
-            reward=payload.get("reward"),
+            reward=total_aggregate_reward,
             done=payload.get("done", False),
         )
 
@@ -93,7 +89,9 @@ class CloudscaleRlEnv(
         Returns:
             State object with episode_id and step_count
         """
+        # OpenEnv's standard State wrapper usually needs these fields. 
+        # If the payload lacks them natively, we default safely.
         return State(
-            episode_id=payload.get("episode_id"),
+            episode_id=payload.get("episode_id", "default-episode"),
             step_count=payload.get("step_count", 0),
         )

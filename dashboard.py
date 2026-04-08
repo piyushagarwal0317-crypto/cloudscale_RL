@@ -25,8 +25,6 @@ from matplotlib.figure import Figure
 
 # Import your new cloud models
 from server.cloudscale_RL_environment import CloudAutoScalerEnv
-from analyzer import TrafficAnalyzer
-from models import ActionType, HealthStatus
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,24 +34,21 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 REFRESH_SEC = int(os.environ.get("REFRESH_SEC", "2"))
 
-# Initialize the local environment and analyzer
-_env = CloudAutoScalerEnv()
+# Initialize the local environment
+_env = CloudAutoScalerEnv(task_level="medium")
 _env.reset()
-_analyzer = TrafficAnalyzer()
 
 # Telemetry History for Charts (Storing last 60 ticks)
 _time_history = deque(maxlen=60)
 _rps_history = deque(maxlen=60)
 _latency_history = {"frontend": deque(maxlen=60), "backend": deque(maxlen=60), "worker": deque(maxlen=60)}
-_action_log = deque(maxlen=30)
 
 def _simulation_loop():
     """Background thread: Steps the environment automatically to generate live data."""
     while True:
         time.sleep(1.0) # 1 tick per second for live demo purposes
         
-        # In a real demo, actions come from your RL/LLM agent. 
-        # Here we simulate a baseline agent that does nothing, forcing the system to react to spikes.
+        # Simulated baseline agent that does nothing, forcing the system to react to spikes.
         actions = {"frontend": "NO_OP", "backend": "NO_OP", "worker": "NO_OP"}
         step_result = _env.step(actions)
         obs = step_result.observations
@@ -68,15 +63,20 @@ def _simulation_loop():
         if done:
             _env.reset()
 
+# Start background simulation
 threading.Thread(target=_simulation_loop, daemon=True).start()
 
 # ---------------------------------------------------------------------------
-# "Grafana" Cyberpunk Styling
+# "Grafana" Cyberpunk Styling & Logic
 # ---------------------------------------------------------------------------
+HEALTHY = "healthy"
+DEGRADED = "degraded"
+CRITICAL = "critical"
+
 _HEALTH_COLOURS = {
-    HealthStatus.HEALTHY.value:  "#00E676", # Neon Green
-    HealthStatus.DEGRADED.value: "#FFEA00", # Neon Yellow
-    HealthStatus.CRITICAL.value: "#FF1744", # Neon Red
+    HEALTHY:  "#00E676", # Neon Green
+    DEGRADED: "#FFEA00", # Neon Yellow
+    CRITICAL: "#FF1744", # Neon Red
 }
 
 _CHART_BG = "#0B1021"
@@ -109,11 +109,12 @@ def _build_cluster_html() -> str:
         active_pods = int(metrics["active_pods"] * _env.services[svc_name].max_replicas)
         latency = metrics["latency_p95"]
         util = metrics["utilization"] * 100
+        queue_depth = metrics["queue_depth"]
         
-        # Determine Health (Simulated)
-        health = HealthStatus.HEALTHY.value
-        if latency > 100: health = HealthStatus.DEGRADED.value
-        if latency > 300: health = HealthStatus.CRITICAL.value
+        # Determine Health Dynamically
+        health = HEALTHY
+        if latency > 100: health = DEGRADED
+        if latency > 300: health = CRITICAL
         h_color = _HEALTH_COLOURS[health]
         
         card = f"""
@@ -143,7 +144,7 @@ def _build_cluster_html() -> str:
                 </div>
                 <div>
                     <div style="color:#9CA3AF; font-size:0.75rem;">QUEUE DEPTH</div>
-                    <div style="color:#F59E0B; font-size:1.2rem; font-family:monospace;">{metrics['queue_depth']:.0f}</div>
+                    <div style="color:#F59E0B; font-size:1.2rem; font-family:monospace;">{queue_depth:.0f}</div>
                 </div>
             </div>
         </div>
@@ -161,7 +162,8 @@ def refresh_cluster_tab():
 # ---------------------------------------------------------------------------
 def _build_telemetry_charts():
     if not _time_history:
-        return None, None
+        # Return empty figures to prevent Gradio errors on fast reloads
+        return Figure(figsize=(10, 3.5)), Figure(figsize=(10, 3.5))
         
     times = list(_time_history)
     
@@ -188,7 +190,7 @@ def _build_telemetry_charts():
             
     # Draw SLA Warning Line
     ax2.axhline(100, color="#FF1744", linestyle="--", linewidth=1, alpha=0.7)
-    ax2.legend(facecolor=_CHART_BG, edgecolor=_GRID_COLOUR, labelcolor=_TEXT_COLOUR)
+    ax2.legend(facecolor=_CHART_BG, edgecolor=_GRID_COLOUR, labelcolor=_TEXT_COLOUR, loc="upper left")
     fig_lat.tight_layout()
 
     return fig_rps, fig_lat
@@ -216,11 +218,11 @@ body, .gradio-container { background: #050B14 !important; color: #E2E8F0 !import
 .tabs > .tab-nav { background: #0B1021 !important; border-bottom: 2px solid #1A233A !important; }
 .tabs > .tab-nav > button { color: #8B9BB4 !important; font-weight: bold !important; text-transform: uppercase; letter-spacing: 1px; }
 .tabs > .tab-nav > button.selected { color: #00E5FF !important; border-bottom: 2px solid #00E5FF !important; }
-button.primary { background: #F50057 !important; color: white !important; font-weight: bold !important; border-radius: 4px !important; }
-button.secondary { background: #1A233A !important; color: #00E5FF !important; border: 1px solid #00E5FF !important; }
+button.primary { background: #F50057 !important; color: white !important; font-weight: bold !important; border-radius: 4px !important; border: none !important; }
+button.secondary { background: #1A233A !important; color: #00E5FF !important; border: 1px solid #00E5FF !important; border-radius: 4px !important;}
 """
 
-with gr.Blocks(title="CloudScale Autoscaler Dashboard") as demo:
+with gr.Blocks(title="CloudScale Autoscaler Dashboard", css=CYBER_CLOUD_CSS) as demo:
     
     gr.HTML("""
     <div style="background:#0B1021; padding:15px; border-bottom: 1px solid #1A233A; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
@@ -259,4 +261,4 @@ with gr.Blocks(title="CloudScale Autoscaler Dashboard") as demo:
     timer.tick(fn=_build_telemetry_charts, outputs=[rps_chart, lat_chart])
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7861, css=CYBER_CLOUD_CSS)
+    demo.launch(server_name="0.0.0.0", server_port=7861)

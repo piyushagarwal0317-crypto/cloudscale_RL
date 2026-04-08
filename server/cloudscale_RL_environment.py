@@ -1,14 +1,9 @@
 """
 cloud_env.py — OpenEnv-compatible environment for Cloud Autoscaling.
 
-Wraps the CloudWorkloadGenerator and SystemDynamics into standard reset/step interfaces
+Wraps the CloudWorkloadGenerator and SystemDynamics into standard reset/step/state interfaces
 so the autoscaling agents (RL or LLM) can be trained to handle traffic spikes.
-
-Example:
-  env = CloudAutoScalerEnv()
-  obs = env.reset()
-  result = env.step({"frontend": "SCALE_UP", "backend": "NO_OP"})
-  print(result.rewards["frontend"]["total"])
+Includes strict grading and 3 difficulty tasks for OpenEnv compliance.
 """
 from __future__ import annotations
 
@@ -17,8 +12,6 @@ import uuid
 import logging
 from typing import Dict, Any, List
 
-# In a real project, these might be imported from separate files (e.g., models.py)
-# For clarity here, we structure them cleanly within the environment ecosystem.
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -70,16 +63,26 @@ class CloudAutoScalerEnv:
     """
     def __init__(
         self,
+        task_level: str = "medium",  # "easy", "medium", or "hard"
         max_steps: int = 200,
-        base_load: int = 500,
-        spike_probability: float = 0.05,
-        pod_startup_delay: int = 3
     ) -> None:
+        self.task_level = task_level.lower()
         self.max_steps = max_steps
-        self.base_load = base_load
-        self.spike_prob = spike_probability
-        self.pod_startup_delay = pod_startup_delay
         
+        # Configure difficulty based on task
+        if self.task_level == "easy":
+            self.base_load = 500
+            self.spike_prob = 0.0      # Predictable traffic
+            self.pod_startup_delay = 1 # Instant scaling
+        elif self.task_level == "hard":
+            self.base_load = 800
+            self.spike_prob = 0.10     # Frequent flash spikes
+            self.pod_startup_delay = 5 # Severe cloud boot delays (requires anticipation)
+        else: # medium
+            self.base_load = 500
+            self.spike_prob = 0.05     # Standard spikes
+            self.pod_startup_delay = 3 # Standard delay
+
         # Reward Weights
         self.weights = {
             "w_latency": 0.3, "w_cost": 0.2, "w_action": 0.1, 
@@ -160,6 +163,10 @@ class CloudAutoScalerEnv:
                 "spike_detected": 1.0 if self._spike_active else 0.0
             }
         return obs
+
+    def state(self) -> Dict[str, Any]:
+        """OpenEnv standard alias for getting the current state."""
+        return self.get_global_state()
 
     # ------------------------------------------------------------------
     # Internal Simulation Mechanics
@@ -299,6 +306,40 @@ class CloudAutoScalerEnv:
             "r_spike": r_spike,
             "r_sla": r_sla
         }
+
+    def grade_task(self) -> float:
+        """
+        Calculates the final episode score between 0.0 and 1.0.
+        Balances strict SLA compliance with cost efficiency (utilization).
+        """
+        # If no requests were processed, score is 0
+        if self.stats.total_requests == 0:
+            return 0.0
+
+        # 1. Calculate SLA Score (0.0 to 1.0)
+        # Any SLA violation is penalized heavily. 
+        # e.g., 5 violations out of 200 steps = 0.75 score. >20 violations = 0.0
+        sla_violation_rate = min(self.stats.sla_violations / (self.max_steps * 0.1), 1.0)
+        sla_score = 1.0 - sla_violation_rate
+
+        # 2. Calculate Efficiency Score (0.0 to 1.0)
+        # Did the agent waste money by over-provisioning?
+        utilizations = [svc.metrics.get("utilization", 0.5) for svc in self.services.values()]
+        avg_utilization = sum(utilizations) / len(utilizations) if utilizations else 0.5
+        
+        # Perfect utilization is around 0.75. Too low = wasted money. Too high = risky.
+        if avg_utilization < 0.3:
+            efficiency_score = 0.4  # Wasted a lot of money
+        elif avg_utilization > 0.9:
+            efficiency_score = 0.6  # Ran way too hot
+        else:
+            efficiency_score = 1.0  # Optimal cloud spend
+
+        # Weighted final score: SLA is more important (70%) than cost (30%)
+        final_score = (sla_score * 0.7) + (efficiency_score * 0.3)
+        
+        # Ensure strict 0.0 to 1.0 bounds
+        return max(0.0, min(1.0, final_score))
 
     def close(self) -> None:
         pass

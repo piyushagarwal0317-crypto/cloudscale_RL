@@ -11,6 +11,8 @@ numpy>=1.24.0
 
 # ── Telemetry & HTTP Client (OpenEnv Fallback) ────────────────────────────────
 requests>=2.28.0
+aiohttp>=3.8.0
+openai>=1.0.0
 
 # ── Autonomous SRE Agents (LLM API) ───────────────────────────────────────────
 # Optional — falls back to local Ollama or deterministic rule engine if no key

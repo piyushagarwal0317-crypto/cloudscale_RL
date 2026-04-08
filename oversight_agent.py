@@ -1,7 +1,7 @@
 """
 autoscaler_agent.py — LLM-powered autonomous scaling agent.
 
-The AutoScalerAgent receives a CloudObservation (current RPS, latency, queue depth)
+The AutoScalerAgent receives a state dictionary (current RPS, latency, queue depth)
 and decides what action to take for its specific microservice:
   SCALE_UP   — request a new pod to handle incoming load
   SCALE_DOWN — remove a pod to save costs during low traffic
@@ -15,23 +15,30 @@ Usage
 -----
     from autoscaler_agent import AutoScalerAgent
     agent = AutoScalerAgent(managed_service="frontend", api_key="sk-ant-...")
-    action = agent.decide(observation)
+    action = agent.decide(observation_dict)
 """
 from __future__ import annotations
 
 import json
 import os
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
+from dataclasses import dataclass
 
-from models import (
-    CloudObservation,
-    ScalingAction,
-    ActionType,
-    TrafficPattern
-)
+from models import ActionType
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Internal Data Models
+# ---------------------------------------------------------------------------
+@dataclass
+class ScalingAction:
+    """Internal schema for agent decisions before being packed by the Orchestrator."""
+    agent_id: str
+    action_type: ActionType
+    reason: str = ""
+    raw_json: str = ""
 
 # ---------------------------------------------------------------------------
 # Prompt Templates
@@ -107,9 +114,9 @@ class AutoScalerAgent:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def decide(self, obs: CloudObservation) -> ScalingAction:
+    def decide(self, obs: Dict[str, Any]) -> ScalingAction:
         """
-        Given the global observation, extracts its specific service data and decides.
+        Given the global observation dict, extracts its specific service data and decides.
         Tries LLM first; falls back to rule-based engine instantly on failure.
         """
         # Ensure the observation contains data for this agent's service
@@ -133,9 +140,9 @@ class AutoScalerAgent:
     # ------------------------------------------------------------------
     def _build_prompt(self, svc: dict, global_obs: dict) -> str:
         # Check if any global alerts affect this service
-        active_spikes = [a for a in global_obs.get("active_alerts", []) if a["pattern"] == TrafficPattern.FLASH_SPIKE.value]
+        active_spikes = [a for a in global_obs.get("active_alerts", []) if a.get("pattern") == "flash_spike"]
         if active_spikes:
-            alerts_text = f"YES! Intensity multiplier: {active_spikes[0]['intensity_multiplier']:.1f}x"
+            alerts_text = f"YES! Intensity multiplier: {active_spikes[0].get('intensity_multiplier', 1.0):.1f}x"
         else:
             alerts_text = "Stable. No flash traffic detected."
 
@@ -223,7 +230,7 @@ class AutoScalerAgent:
         utilization = svc.get("utilization", 0.0)
         pending = svc.get("pending_pods", 0)
         
-        active_spikes = [a for a in global_obs.get("active_alerts", []) if a["pattern"] == TrafficPattern.FLASH_SPIKE.value]
+        active_spikes = [a for a in global_obs.get("active_alerts", []) if a.get("pattern") == "flash_spike"]
 
         # 1. Proactive Spike Handling
         if active_spikes and pending == 0:

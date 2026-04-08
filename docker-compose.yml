@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  cloudscale-rl:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MAX_STEPS=200
+    volumes:
+      # Mount for development (optional - comment out for production)
+      - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Optional: Run inference agent in a separate container
+  inference-agent:
+    build: .
+    depends_on:
+      cloudscale-rl:
+        condition: service_healthy
+    environment:
+      - ENV_URL=http://cloudscale-rl:8000
+      - TASK_LEVEL=medium
+      - MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
+      # Add your API keys here
+      - HF_TOKEN=${HF_TOKEN}
+      - API_KEY=${API_KEY}
+    command: ["python", "inference.py"]
+    profiles:
+      - inference  # Only run when explicitly requested with --profile inference

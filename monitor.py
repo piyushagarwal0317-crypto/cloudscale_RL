@@ -4,17 +4,46 @@ workload_generator.py — Traffic Simulation Engine
 Generates realistic cloud infrastructure workloads including diurnal (day/night) 
 patterns, stochastic noise, and sudden flash spikes.
 
-This replaces the old AgentMonitor and SyntheticActionGenerator, acting as the 
-heartbeat for the CloudAutoScalerEnv.
+This acts as the heartbeat for the CloudAutoScalerEnv.
 """
 
 import math
 import time
 import random
-from typing import Dict, List, Tuple
-from dataclasses import asdict
+from enum import Enum
+from typing import Dict, List, Tuple, Any
+from dataclasses import dataclass, field
 
-from models import TrafficPattern, TrafficAlert, SystemStats, ServiceMetrics
+# ---------------------------------------------------------------------------
+# Internal Enums & Dataclasses 
+# (Kept local to prevent polluting the OpenEnv Pydantic models)
+# ---------------------------------------------------------------------------
+class TrafficPattern(str, Enum):
+    NORMAL      = "normal"
+    FLASH_SPIKE = "flash_spike"    
+    DIURNAL     = "diurnal"        
+    DECAY       = "decay"          
+
+@dataclass
+class TrafficAlert:
+    alert_id: str
+    timestamp: float
+    service_id: str
+    pattern: TrafficPattern
+    intensity_multiplier: float    
+    description: str
+    acknowledged: bool = False
+
+@dataclass
+class SystemStats:
+    global_time_step: int = 0
+    total_requests: int = 0
+    active_spikes: int = 0
+    sla_violations: int = 0
+    total_scale_ups: int = 0
+    total_scale_downs: int = 0
+    uptime_seconds: float = 0.0
+    system_healthy: bool = True
 
 # ---------------------------------------------------------------------------
 # Workload Generator Configuration
@@ -39,8 +68,8 @@ class CloudWorkloadGenerator:
     Simulates realistic web traffic. 
     Stateful — maintains current spike state and time step.
     """
-    def __init__(self, config: WorkloadConfig = WorkloadConfig()):
-        self.config = config
+    def __init__(self, config: WorkloadConfig = None):
+        self.config = config or WorkloadConfig()
         self._time_step = 0
         
         self._active_spike = False
@@ -97,20 +126,20 @@ class CloudWorkloadGenerator:
         self._spike_duration_remaining = duration
 
 # ---------------------------------------------------------------------------
-# State Tracker (Replaces the old Monitor class logic)
+# State Tracker
 # ---------------------------------------------------------------------------
 class SystemStateTracker:
     """
     Maintains the history and rolling stats of the environment.
-    This is what the TrafficAnalyzer and the Dashboard consume.
+    This tracks the global metrics across all microservices.
     """
     def __init__(self):
         self.stats = SystemStats()
         self.rps_history: List[float] = []
-        self.service_metrics: Dict[str, ServiceMetrics] = {}
+        self.service_metrics: Dict[str, Any] = {}
         self.active_alerts: List[TrafficAlert] = []
         
-    def update(self, current_rps: float, services: Dict[str, ServiceMetrics]):
+    def update(self, current_rps: float, services: Dict[str, Any]):
         """Called every tick by the CloudAutoScalerEnv."""
         self.stats.global_time_step += 1
         self.stats.total_requests += int(current_rps)

@@ -51,6 +51,91 @@ That's it! The `CloudscaleRlEnv.from_docker_image()` method handles:
 - Connecting to the environment
 - Container cleanup when you call `close()`
 
+## Docker Setup
+
+### Local Development with Docker
+
+Build and run the entire project using Docker:
+
+```bash
+# Build the Docker image
+docker build -t cloudscale-rl:latest .
+
+# Run the FastAPI server
+docker run -p 8000:8000 cloudscale-rl:latest
+
+# Or use docker-compose for easier management
+docker-compose up
+```
+
+### Running the Inference Agent
+
+To run the evaluation agent against the local server:
+
+```bash
+# Terminal 1: Start the server
+docker-compose up cloudscale-rl
+
+# Terminal 2: Run the inference agent
+docker-compose --profile inference run --rm inference-agent
+```
+
+### Environment Variables
+
+Set these environment variables for the inference agent:
+
+- `HF_TOKEN` or `API_KEY`: Your Hugging Face API token
+- `ENV_URL`: Server URL (default: `http://localhost:8000`)
+- `TASK_LEVEL`: Difficulty level (`easy`, `medium`, `hard`)
+- `MODEL_NAME`: LLM model to use
+
+## Hugging Face Spaces Deployment
+
+Deploy your CloudScale RL environment to Hugging Face Spaces for easy sharing and evaluation:
+
+### Prerequisites
+
+1. Create a Hugging Face account at https://huggingface.co
+2. Generate an API token at https://huggingface.co/settings/tokens
+3. Set your token as an environment variable:
+   ```bash
+   export HF_TOKEN='your_token_here'
+   ```
+
+### Quick Deployment
+
+Use the provided setup script:
+
+```bash
+# Using Bash script
+./setup_hf.sh
+
+# Or using Python script
+python setup_hf.py
+```
+
+### Manual Deployment
+
+If you prefer to deploy manually:
+
+```bash
+# Authenticate with Hugging Face
+python -c "from huggingface_hub import login; login('$HF_TOKEN')"
+
+# Deploy to your space
+openenv push --repo-id bitmain/cloudscale-rl
+```
+
+### Accessing Your Space
+
+After deployment, your environment will be available at:
+`https://huggingface.co/spaces/bitmain/cloudscale-rl`
+
+The space includes:
+- **API Endpoints**: `/reset`, `/step`, `/health`
+- **Web Interface**: Interactive UI at `/web`
+- **Documentation**: OpenAPI docs at `/docs`
+
 ## Building the Docker Image
 
 Before using the environment, you need to build the Docker image:

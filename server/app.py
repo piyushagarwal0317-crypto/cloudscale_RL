@@ -9,12 +9,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# Ensure the parent directory is on sys.path when running from server/
 import sys
 import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
-# Import your new Cloud environment models
+# Import the updated environment
 from server.cloudscale_RL_environment import CloudAutoScalerEnv
 
 logging.basicConfig(level=logging.INFO)
@@ -36,23 +35,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Global environment (singleton, recreated on /reset)
-# ---------------------------------------------------------------------------
 MAX_STEPS = int(os.environ.get("MAX_STEPS", "200"))
-BASE_LOAD = int(os.environ.get("BASE_LOAD", "500"))
-
 _env: Optional[CloudAutoScalerEnv] = None
 _last_obs = None
 
-def get_env() -> CloudAutoScalerEnv:
+def get_env(task_level: str = "medium") -> CloudAutoScalerEnv:
     global _env
-    if _env is None:
-        # Initialize the environment with cloud-specific configs
+    # Re-initialize if the environment doesn't exist OR if the task level changed
+    if _env is None or _env.task_level != task_level:
         _env = CloudAutoScalerEnv(
-            max_steps=MAX_STEPS,
-            base_load=BASE_LOAD,
-            spike_probability=0.05
+            task_level=task_level,
+            max_steps=MAX_STEPS
         )
     return _env
 
@@ -60,17 +53,21 @@ def get_env() -> CloudAutoScalerEnv:
 # Pydantic request / response schemas
 # ---------------------------------------------------------------------------
 class StepRequest(BaseModel):
-    # Maps agent_id (service name) to an action (SCALE_UP, SCALE_DOWN, NO_OP)
     actions: Dict[str, str] = Field(
         default={"frontend": "NO_OP", "backend": "NO_OP", "worker": "NO_OP"},
         description="Scaling actions for each microservice agent."
+    )
+
+class ResetRequest(BaseModel):
+    task_level: str = Field(
+        default="medium",
+        description="Difficulty of the task: 'easy', 'medium', or 'hard'."
     )
 
 # ---------------------------------------------------------------------------
 # Serialisation helpers
 # ---------------------------------------------------------------------------
 def _obs_to_dict(obs_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Converts the multi-agent observation space into JSON-safe dicts."""
     return {
         agent_id: {
             "active_pods": obs.get("active_pods"),
@@ -86,7 +83,6 @@ def _obs_to_dict(obs_dict: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 def _reward_to_dict(rewards_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Serializes the strict, discrete bucketed rewards."""
     return {
         agent_id: {
             "total": reward.get("total", 0.0),
@@ -99,17 +95,6 @@ def _reward_to_dict(rewards_dict: Dict[str, Any]) -> Dict[str, Any]:
             }
         }
         for agent_id, reward in rewards_dict.items()
-    }
-
-def _system_stats_to_dict(stats) -> Dict[str, Any]:
-    """Global system metrics."""
-    return {
-        "global_time_step": stats.global_time,
-        "total_requests_processed": stats.total_requests,
-        "total_sla_violations": stats.sla_violations,
-        "active_spikes": stats.active_spikes,
-        "uptime_seconds": time.time() - stats.start_time,
-        "system_healthy": stats.system_healthy
     }
 
 # ---------------------------------------------------------------------------
@@ -126,13 +111,17 @@ def health():
     }
 
 @app.post("/reset")
-def reset():
+def reset(req: ResetRequest = None):
     global _last_obs
-    env = get_env()
+    # Default to medium if no request body is provided
+    task_level = req.task_level if req else "medium"
+    
+    env = get_env(task_level=task_level)
     obs = env.reset()
     _last_obs = obs
     return {
         "status": "reset", 
+        "task_level": task_level,
         "observation": _obs_to_dict(obs)
     }
 
@@ -142,42 +131,31 @@ def step(req: StepRequest):
     env = get_env()
     
     if _last_obs is None:
-        # Auto-reset on first step if not explicitly called
         env.reset()
         
-    # Pass the multi-agent action dictionary to the environment
-    obs, rewards, done, info = env.step(req.actions)
-    _last_obs = obs
+    # FIX: Correctly unpack the CloudStepResult object
+    result = env.step(req.actions)
+    _last_obs = result.observations
+    
+    info = result.info
+    
+    # 🏆 KILLER FEATURE: Inject the Grader Score when the episode finishes
+    if result.done:
+        final_score = env.grade_task()
+        final_score = max(0.01, min(0.99, final_score))
+        info["final_score"] = final_score
+        info["task_level"] = env.task_level
+        logger.info(f"Episode finished. Task: {env.task_level} | Final Score: {info['final_score']}")
     
     return {
-        "done": done,
+        "done": result.done,
         "info": info,
-        "observation": _obs_to_dict(obs),
-        "rewards": _reward_to_dict(rewards),
+        "observation": _obs_to_dict(result.observations),
+        "rewards": _reward_to_dict(result.rewards),
     }
 
 @app.get("/state")
 def get_state():
-    """Returns a snapshot of the current state without advancing the simulation."""
     env = get_env()
     obs = env.get_global_state()
     return _obs_to_dict(obs)
-
-@app.get("/metrics")
-def get_metrics():
-    """System-wide monitoring stats (replaces the old /stats endpoint)."""
-    env = get_env()
-    return _system_stats_to_dict(env.stats)
-
-@app.get("/services")
-def get_services():
-    """Returns configuration and limits for all active microservices."""
-    env = get_env()
-    return {
-        name: {
-            "min_replicas": svc.min_replicas,
-            "max_replicas": svc.max_replicas,
-            "current_replicas": svc.active_pods
-        }
-        for name, svc in env.services.items()
-    }
