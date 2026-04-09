@@ -616,5 +616,71 @@ def main():
         reload=False
     )
 
+# ---------------------------------------------------------------------------
+# OpenEnv Grader Endpoints — Required by validator
+# ---------------------------------------------------------------------------
+
+@app.get("/tasks")
+def list_tasks():
+    """Lists all available tasks — required by OpenEnv validator."""
+    return {
+        "tasks": [
+            {
+                "name": "easy",
+                "description": "Stable traffic, no spikes, instant pod startup (500 RPS base)",
+                "max_steps": 200,
+                "grader": "/grade/easy",
+                "threshold": 0.7
+            },
+            {
+                "name": "medium",
+                "description": "Standard traffic with 5% spike probability, 3-step pod delay (150 RPS base)",
+                "max_steps": 200,
+                "grader": "/grade/medium",
+                "threshold": 0.7
+            },
+            {
+                "name": "hard",
+                "description": "Heavy load with 10% flash spikes, 5-step pod delay (800 RPS base)",
+                "max_steps": 200,
+                "grader": "/grade/hard",
+                "threshold": 0.7
+            }
+        ]
+    }
+
+@app.post("/grade/easy")
+def grade_easy():
+    """Grader endpoint for easy task — required by OpenEnv validator."""
+    env = get_env(task_level="easy")
+    score = max(0.01, min(0.99, env.grade_task()))
+    return {
+        "task": "easy",
+        "final_score": score,
+        "success": score >= 0.7
+    }
+
+@app.post("/grade/medium")
+def grade_medium():
+    """Grader endpoint for medium task — required by OpenEnv validator."""
+    env = get_env(task_level="medium")
+    score = max(0.01, min(0.99, env.grade_task()))
+    return {
+        "task": "medium",
+        "final_score": score,
+        "success": score >= 0.7
+    }
+
+@app.post("/grade/hard")
+def grade_hard():
+    """Grader endpoint for hard task — required by OpenEnv validator."""
+    env = get_env(task_level="hard")
+    score = max(0.01, min(0.99, env.grade_task()))
+    return {
+        "task": "hard",
+        "final_score": score,
+        "success": score >= 0.7
+    }
+
 if __name__ == "__main__":
     main()
