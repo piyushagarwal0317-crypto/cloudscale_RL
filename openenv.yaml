@@ -5,46 +5,10 @@ runtime: fastapi
 app: server.app:app
 port: 8000
 base_path: /
-
 tasks:
   - name: easy
-    description: >
-      Manage cloud autoscaling under stable, predictable traffic with no random
-      spikes and instant pod startup (delay=1). Base load is 500 RPS.
-      The agent must maintain low latency and avoid over-provisioning across
-      the frontend, backend, and worker microservices.
-    parameters:
-      task_level: easy
-    max_steps: 200
-    grader:
-      type: score_threshold
-      score_key: final_score
-      threshold: 0.7
-
+    grader: /grade/easy
   - name: medium
-    description: >
-      Manage cloud autoscaling under standard diurnal traffic (150 RPS base)
-      with occasional random spikes (5% probability per step) and a 3-step
-      pod startup delay. The agent must proactively scale to handle spikes
-      while keeping cloud costs low.
-    parameters:
-      task_level: medium
-    max_steps: 200
-    grader:
-      type: score_threshold
-      score_key: final_score
-      threshold: 0.7
-
+    grader: /grade/medium
   - name: hard
-    description: >
-      Manage cloud autoscaling under heavy base load (800 RPS) with frequent
-      flash traffic spikes (10% probability per step) and severe 5-step pod
-      startup delays. The agent must anticipate spikes early and aggressively
-      scale while balancing cloud cost waste across all three microservices.
-    parameters:
-      task_level: hard
-    max_steps: 200
-    grader:
-      type: score_threshold
-      score_key: final_score
-      threshold: 0.7
+    grader: /grade/hard
