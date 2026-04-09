@@ -1,5 +1,15 @@
 README.md
+__init__.py
+analyzer.py
+client.py
+dashboard.py
+inference.py
+models.py
+monitor.py
+oversight_agent.py
 pyproject.toml
+setup_hf.py
+train_oversight.py
 ./__init__.py
 ./analyzer.py
 ./client.py

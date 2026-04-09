@@ -1,3 +1,4 @@
+
 """
 inference.py — OpenEnv Evaluation Script for CloudScale RL
 MANDATORY: Must run in the root of your project.
@@ -31,7 +32,7 @@ def load_local_env(env_file: str = ".env") -> None:
                 key, value = line.split("=", 1)
                 key = key.strip()
                 if key.startswith("export "):
-                    key = key[len("export ") :].strip()
+                    key = key[len("export "):].strip()
                 if not key or key in os.environ:
                     continue
 
@@ -43,49 +44,44 @@ def load_local_env(env_file: str = ".env") -> None:
 
 load_local_env()
 
-def get_hf_token() -> str:
-    token = os.getenv("HF_TOKEN", "").strip()
-    if not token:
-        raise SystemExit(
-            "Missing required environment variable 'HF_TOKEN'. "
-            "Please set this variable before running inference.py."
-        )
-    return token
+# Safe defaults — no SystemExit crashes if validator does not set these
+HF_TOKEN     = os.getenv("HF_TOKEN",     "").strip()
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1").strip()
+MODEL_NAME   = os.getenv("MODEL_NAME",   "meta-llama/Llama-3.1-8B-Instruct").strip()
 
+# Warn but do not crash if HF_TOKEN is missing
+if not HF_TOKEN:
+    print("[WARN] HF_TOKEN is not set. API calls may fail.", file=sys.stderr, flush=True)
+    HF_TOKEN = "placeholder"
 
-def get_required_env(var_name: str, purpose: str) -> str:
-    value = os.getenv(var_name, "").strip()
-    if not value:
-        raise SystemExit(
-            f"Missing required environment variable '{var_name}'. "
-            f"{purpose} Please set this variable before running inference.py."
-        )
-    return value
+if not API_BASE_URL:
+    print("[WARN] API_BASE_URL is not set. Using default HF inference endpoint.", file=sys.stderr, flush=True)
+    API_BASE_URL = "https://api-inference.huggingface.co/v1"
 
-HF_TOKEN = get_hf_token()
-API_BASE_URL = get_required_env("API_BASE_URL", "This variable must point to your LLM API endpoint.")
-MODEL_NAME = get_required_env("MODEL_NAME", "This variable must define the model identifier for inference.")
+if not MODEL_NAME:
+    print("[WARN] MODEL_NAME is not set. Using default model.", file=sys.stderr, flush=True)
+    MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
 
 # Point this to your Hugging Face Space URL or Localhost
-ENV_URL = os.getenv("ENV_URL", "http://localhost:8000")
+ENV_URL   = os.getenv("ENV_URL",    "http://localhost:8000")
 TASK_NAME = os.getenv("TASK_LEVEL", "medium")  # "easy", "medium", or "hard"
 BENCHMARK = "cloudscale_rl"
 
-MAX_STEPS = 200
-TEMPERATURE = 0.1 # Low temperature for more deterministic, logical JSON outputs
-MAX_TOKENS = 150
+MAX_STEPS               = 200
+TEMPERATURE             = 0.1  # Low temperature for more deterministic, logical JSON outputs
+MAX_TOKENS              = 150
 SUCCESS_SCORE_THRESHOLD = 0.7  # Score required to pass the grader
 
 SYSTEM_PROMPT = textwrap.dedent(
     """
     You are an autonomous AI Cloud DevOps Agent managing three microservices: frontend, backend, and worker.
     Your goal is to maintain system health (prevent SLA violations/high latency) while minimizing wasted cloud costs.
-    
+
     Valid actions for each service: "SCALE_UP", "SCALE_DOWN", "NO_OP".
     - Scale UP if queue_depth > 0 or utilization > 0.85
     - Scale DOWN if utilization < 0.4 and queue_depth == 0
     - NO_OP if traffic is stable.
-    
+
     You must respond with a STRICT JSON dictionary matching this exact format:
     {"frontend": "NO_OP", "backend": "NO_OP", "worker": "NO_OP"}
     Do not include markdown tags, reasoning, or any other text. Just the JSON.
@@ -93,10 +89,12 @@ SYSTEM_PROMPT = textwrap.dedent(
 ).strip()
 
 # ---------------------------------------------------------------------------
-# OpenEnv Strict Logging format
+# OpenEnv Strict Logging Format
 # ---------------------------------------------------------------------------
+
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
+
 
 def sanitize_action(action: str) -> str:
     return action.replace("\n", " ").replace("\r", " ").replace('"', "'").strip()
@@ -104,8 +102,8 @@ def sanitize_action(action: str) -> str:
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     action_str = sanitize_action(action)
-    error_val = error if error else "null"
-    done_val = str(done).lower()
+    error_val  = error if error else "null"
+    done_val   = str(done).lower()
     print(
         f"[STEP] step={step} action={action_str} reward={reward:.2f} done={done_val} error={error_val}",
         flush=True,
@@ -114,21 +112,26 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
+        flush=True,
+    )
 
 # ---------------------------------------------------------------------------
 # LLM Interaction
 # ---------------------------------------------------------------------------
+
 def build_user_prompt(step: int, obs: Dict[str, Any]) -> str:
     return textwrap.dedent(
         f"""
         Step: {step}
         Current Cloud State Observation:
         {json.dumps(obs, indent=2)}
-        
+
         Provide your scaling actions as a JSON object.
         """
     ).strip()
+
 
 def get_model_action(client: OpenAI, step: int, obs: Dict[str, Any]) -> tuple[Dict[str, str], str]:
     user_prompt = build_user_prompt(step, obs)
@@ -138,26 +141,29 @@ def get_model_action(client: OpenAI, step: int, obs: Dict[str, Any]) -> tuple[Di
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
+                {"role": "user",   "content": user_prompt},
             ],
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
             stream=False,
         )
         raw_text = (completion.choices[0].message.content or "").strip()
-        
+
         # Strip potential markdown formatting if the model disobeys
-        if raw_text.startswith("```json"):
-            raw_text = raw_text.strip("`").replace("json\n", "")
-            
+        if raw_text.startswith("```"):
+            raw_text = raw_text.strip("`")
+            if raw_text.startswith("json"):
+                raw_text = raw_text[4:].strip()
+
         action_dict = json.loads(raw_text)
-        
-        # Ensure all keys exist
+
+        # Ensure all keys exist and are valid
         for svc in ["frontend", "backend", "worker"]:
             if svc not in action_dict or action_dict[svc] not in ["SCALE_UP", "SCALE_DOWN", "NO_OP"]:
                 action_dict[svc] = "NO_OP"
-                
+
         return action_dict, raw_text
+
     except Exception as exc:
         print(f"[DEBUG] Model request/parsing failed: {exc}. Raw output: {raw_text}", file=sys.stderr, flush=True)
         # Fallback to safe NO_OPs to keep simulation running
@@ -167,34 +173,63 @@ def get_model_action(client: OpenAI, step: int, obs: Dict[str, Any]) -> tuple[Di
 # ---------------------------------------------------------------------------
 # Async Environment Wrapper
 # ---------------------------------------------------------------------------
+
 class CloudEnvClient:
     def __init__(self, base_url: str):
-        self.base_url = base_url
-        self.session = aiohttp.ClientSession()
+        self.base_url = base_url.rstrip("/")  # Remove trailing slash to avoid double-slash URLs
+        self.session  = aiohttp.ClientSession()
 
     async def reset(self, task_level: str) -> Dict[str, Any]:
-        async with self.session.post(f"{self.base_url}/reset", json={"task_level": task_level}) as resp:
-            data = await resp.json()
-            return data["observation"]
+        try:
+            async with self.session.post(
+                f"{self.base_url}/reset",
+                json={"task_level": task_level},
+            ) as resp:
+                data = await resp.json()
+                return data["observation"]
+        except Exception as exc:
+            print(f"[DEBUG] reset() failed: {exc}", file=sys.stderr, flush=True)
+            return {}
 
     async def step(self, actions: Dict[str, str]) -> Dict[str, Any]:
-        async with self.session.post(f"{self.base_url}/step", json={"actions": actions}) as resp:
-            return await resp.json()
+        try:
+            async with self.session.post(
+                f"{self.base_url}/step",
+                json={"actions": actions},
+            ) as resp:
+                return await resp.json()
+        except Exception as exc:
+            print(f"[DEBUG] step() failed: {exc}", file=sys.stderr, flush=True)
+            # Return safe defaults so the loop can exit cleanly
+            return {
+                "observation": {},
+                "done":        True,
+                "info":        {"final_score": 0.0},
+                "rewards": {
+                    "frontend": {"total": 0.0},
+                    "backend":  {"total": 0.0},
+                    "worker":   {"total": 0.0},
+                },
+            }
 
-    async def close(self):
-        await self.session.close()
+    async def close(self) -> None:
+        try:
+            await self.session.close()
+        except Exception as exc:
+            print(f"[DEBUG] session.close() failed: {exc}", file=sys.stderr, flush=True)
 
 # ---------------------------------------------------------------------------
 # Main Evaluation Loop
 # ---------------------------------------------------------------------------
+
 async def main() -> None:
     client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-    env = CloudEnvClient(ENV_URL)
+    env    = CloudEnvClient(ENV_URL)
 
-    rewards: List[float] = []
-    steps_taken = 0
-    score = 0.0
-    success = False
+    rewards:     List[float] = []
+    steps_taken: int         = 0
+    score:       float       = 0.0
+    success:     bool        = False
 
     log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
 
@@ -203,44 +238,53 @@ async def main() -> None:
         obs = await env.reset(task_level=TASK_NAME)
 
         for step in range(1, MAX_STEPS + 1):
-            
+
             # 2. Get LLM Action
             action_dict, raw_action_str = get_model_action(client, step, obs)
 
             # 3. Step Environment
             result = await env.step(action_dict)
-            
-            obs = result["observation"]
-            done = result["done"]
-            info = result["info"]
-            
-            # Calculate total reward for this step across all agents
-            step_rewards = result["rewards"]
-            total_step_reward = sum(r["total"] for r in step_rewards.values())
+
+            obs          = result.get("observation", {})
+            done         = result.get("done", False)
+            info         = result.get("info", {})
+            step_rewards = result.get("rewards", {})
+
+            # Safely calculate total reward — handles missing keys gracefully
+            total_step_reward = sum(
+                r.get("total", 0.0)
+                for r in step_rewards.values()
+                if isinstance(r, dict)
+            )
             rewards.append(total_step_reward)
-            
+
             steps_taken = step
-            error = None
 
             # 4. Log Step
-            log_step(step=step, action=raw_action_str, reward=total_step_reward, done=done, error=error)
+            log_step(step=step, action=raw_action_str, reward=total_step_reward, done=done, error=None)
 
             if done:
-                # Retrieve the final grader score we implemented in app.py
-                # Clamp to the validator-safe range to ensure score output is valid.
+                # Clamp to validator-safe range
                 score = max(0.01, min(0.99, info.get("final_score", 0.0)))
                 break
 
         success = score >= SUCCESS_SCORE_THRESHOLD
 
+    except Exception as exc:
+        print(f"[DEBUG] Unhandled error in evaluation loop: {exc}", file=sys.stderr, flush=True)
+
     finally:
-        try:
-            await env.close()
-        except Exception as e:
-            print(f"[DEBUG] env.close() error: {e}", file=sys.stderr, flush=True)
-            
-        # 5. Log End
+        await env.close()
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
+# ---------------------------------------------------------------------------
+# Entry Point
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as exc:
+        print(f"[DEBUG] Fatal error in main: {exc}", file=sys.stderr, flush=True)
+        log_end(success=False, steps=0, score=0.0, rewards=[])
+        sys.exit(1)
