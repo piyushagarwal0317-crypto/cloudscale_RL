@@ -82,7 +82,17 @@ log "Repo:     $REPO_DIR"
 log "Ping URL: $PING_URL"
 printf "\n"
 
-log "${BOLD}Step 1/3: Pinging HF Space${NC} ($PING_URL/reset) ..."
+if [ -f "$REPO_DIR/.env" ]; then
+  log "Loading environment from $REPO_DIR/.env"
+  set -a
+  # shellcheck disable=SC1090
+  . "$REPO_DIR/.env"
+  set +a
+else
+  hint "No $REPO_DIR/.env found. Export HF_TOKEN, API_BASE_URL, and MODEL_NAME in your shell."
+fi
+
+log "${BOLD}Step 1/4: Pinging HF Space${NC} ($PING_URL/reset) ..."
 
 CURL_OUTPUT=$(portable_mktemp "validate-curl")
 CLEANUP_FILES+=("$CURL_OUTPUT")
@@ -104,7 +114,7 @@ else
   stop_at "Step 1"
 fi
 
-log "${BOLD}Step 2/3: Running docker build${NC} ..."
+log "${BOLD}Step 2/4: Running docker build${NC} ..."
 
 if ! command -v docker &>/dev/null; then
   fail "docker command not found"
@@ -134,7 +144,7 @@ else
   stop_at "Step 2"
 fi
 
-log "${BOLD}Step 3/3: Running openenv validate${NC} ..."
+log "${BOLD}Step 3/4: Running openenv validate${NC} ..."
 
 if ! command -v openenv &>/dev/null; then
   fail "openenv command not found"
@@ -166,7 +176,8 @@ REQUIRED_ENV_VARS=(HF_TOKEN API_BASE_URL MODEL_NAME)
 for var in "${REQUIRED_ENV_VARS[@]}"; do
   if [ -z "${!var:-}" ]; then
     fail "Required environment variable $var is not defined"
-    hint "Export $var before running this script. Example: export $var=your_value"
+    hint "Set it in $REPO_DIR/.env or export it before running this script."
+    hint "Example: export $var=your_value"
     stop_at "Step 4"
   fi
 done
@@ -177,7 +188,7 @@ INFERENCE_OUTPUT=$(run_with_timeout "$DOCKER_BUILD_TIMEOUT" env HF_TOKEN="$HF_TO
 INFERENCE_OK=$?
 
 if [ "$INFERENCE_OK" -eq 0 ]; then
-  if printf "%s\n" "$INFERENCE_OUTPUT" | grep -q '^\[START\]' && printf "%s\n" "$INFERENCE_OUTPUT" | grep -q '^\[END\]'; then
+  if grep -q '^\[START\]' <<< "$INFERENCE_OUTPUT" && grep -q '^\[END\]' <<< "$INFERENCE_OUTPUT"; then
     pass "Inference script completed successfully and emitted structured logs"
   else
     fail "Inference script did not emit the required structured [START]/[END] logs"

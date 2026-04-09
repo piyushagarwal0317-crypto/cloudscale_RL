@@ -16,6 +16,33 @@ from openai import OpenAI
 # Configuration & Environment Variables
 # ---------------------------------------------------------------------------
 
+def load_local_env(env_file: str = ".env") -> None:
+    """Load KEY=VALUE pairs from a local .env file without overriding existing env vars."""
+    if not os.path.isfile(env_file):
+        return
+
+    try:
+        with open(env_file, "r", encoding="utf-8") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+
+                key, value = line.split("=", 1)
+                key = key.strip()
+                if key.startswith("export "):
+                    key = key[len("export ") :].strip()
+                if not key or key in os.environ:
+                    continue
+
+                value = value.strip().strip('"').strip("'")
+                os.environ[key] = value
+    except OSError as exc:
+        print(f"[DEBUG] Failed to load {env_file}: {exc}", file=sys.stderr, flush=True)
+
+
+load_local_env()
+
 def get_hf_token() -> str:
     token = os.getenv("HF_TOKEN", "").strip()
     if not token:

@@ -26,18 +26,30 @@ A sophisticated reinforcement learning environment for training and evaluating c
 # Clone and navigate to the project
 cd /path/to/cloudscale_RL
 
+# Create local env file and fill required values
+cp .env.example .env
+# Edit .env and set HF_TOKEN, API_BASE_URL, MODEL_NAME
+
 # Start the server using Docker Compose
 docker-compose up
 
-# In another terminal, run the inference agent
-python inference.py --url http://localhost:8000 --model gpt-4 --episodes 3
+# In another terminal, load env vars and run inference
+set -a
+source .env
+set +a
+python inference.py
 ```
 
 ### Option 2: Connect to HF Space
 
 ```bash
-# Run against the deployed HF Space
-python inference.py --url https://bitmain-cloud-scale-rl.hf.space --model gpt-4 --episodes 1
+# Point ENV_URL to your deployed HF Space, then run inference
+cp .env.example .env
+# Edit .env and set ENV_URL, HF_TOKEN, API_BASE_URL, MODEL_NAME
+set -a
+source .env
+set +a
+python inference.py
 ```
 
 ### Option 3: Use as Python Module
@@ -711,10 +723,17 @@ curl https://your-username-cloudscale-rl.hf.space/health
 Before running inference or validation, ensure the following environment variables are defined:
 
 ```bash
-export HF_TOKEN="your_hf_token"
-export API_BASE_URL="https://router.huggingface.co/v1"
-export MODEL_NAME="<your-model-identifier>"
-export ENV_URL="https://bitmain-cloud-scale-rl.hf.space"
+cp .env.example .env
+# Edit .env with your values
+# HF_TOKEN=...
+# API_BASE_URL=https://router.huggingface.co/v1
+# MODEL_NAME=<your-model-identifier>
+# ENV_URL=https://bitmain-cloud-scale-rl.hf.space
+
+# Load variables into current shell
+set -a
+source .env
+set +a
 ```
 
 `inference.py` must be executed from the repository root and will use these variables to run the LLM evaluation.
@@ -729,19 +748,21 @@ Use the provided validation script to verify your setup:
 ./validate-submission.sh https://bitmain-cloud-scale-rl.hf.space .
 ```
 
-**What it checks** (3/3 validation):
+**What it checks** (4/4 validation):
 
-1. ✅ **HF Space Reachability**: Pings `/health` endpoint
+1. ✅ **HF Space Reachability**: Pings `/reset` endpoint
 2. ✅ **Docker Build**: Builds Dockerfile successfully  
 3. ✅ **OpenEnv Compliance**: Validates `openenv.yaml` structure
+4. ✅ **Inference Runtime**: Verifies required env vars and runs `inference.py`
 
 **Output**:
 ```
-Step 1/3: Pinging HF Space ✅ PASSED (HTTP 200)
-Step 2/3: Docker Build ✅ PASSED (6.2s)
-Step 3/3: OpenEnv Validate ✅ PASSED ([OK] cloudscale_RL: Ready for multi-mode deployment)
+Step 1/4: Pinging HF Space ✅ PASSED (HTTP 200)
+Step 2/4: Docker Build ✅ PASSED (6.2s)
+Step 3/4: OpenEnv Validate ✅ PASSED ([OK] cloudscale_RL: Ready for multi-mode deployment)
+Step 4/4: Inference Script ✅ PASSED ([START]/[END] logs present)
 
-All 3/3 checks passed! Your submission is ready.
+All 4/4 checks passed! Your submission is ready.
 ```
 
 ---
@@ -980,11 +1001,18 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Configure required inference env vars
+cp .env.example .env
+# Edit .env and set HF_TOKEN, API_BASE_URL, MODEL_NAME
+
 # Run development server
 uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 
 # In another terminal, test with inference
-python inference.py --url http://localhost:8000 --episodes 1
+set -a
+source .env
+set +a
+python inference.py
 ```
 
 ---
@@ -995,11 +1023,16 @@ python inference.py --url http://localhost:8000 --episodes 1
 # Validate environment locally
 python -m pytest tests/
 
+# Load env vars for inference and validation
+set -a
+source .env
+set +a
+
 # Run validation script
 ./validate-submission.sh http://localhost:8000 .
 
 # Test inference script
-python inference.py --url http://localhost:8000 --episodes 3 --verbose
+python inference.py
 ```
 
 

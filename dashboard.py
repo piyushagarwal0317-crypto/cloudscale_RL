@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 # Configuration & State Simulation
 # ---------------------------------------------------------------------------
 REFRESH_SEC = int(os.environ.get("REFRESH_SEC", "2"))
+DEFAULT_SPACE_URL = "https://bitmain-cloud-scale-rl.hf.space"
+API_DOCS_BASE_URL = os.environ.get("API_DOCS_BASE_URL", os.environ.get("ENV_URL", DEFAULT_SPACE_URL)).rstrip("/")
+API_DOCS_URL = os.environ.get("API_DOCS_URL", f"{API_DOCS_BASE_URL}/docs")
 
 # Initialize the local environment
 _env = CloudAutoScalerEnv(task_level="medium")
@@ -124,15 +127,25 @@ def _build_cluster_html() -> str:
     spike_pct = float(obs.get("frontend", {}).get("spike_percentage", 0.0))
     spike_label = "ACTIVE" if spike_pct > 0 else "IDLE"
     spike_color = "#F59E0B" if spike_pct > 0 else "#00E676"
-    
+
     html = f'''
-    <div style="display:flex; justify-content:center; margin-bottom:16px;">
+    <div style="display:flex; justify-content:center; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
         <div style="background:#111827; border:1px solid #1F2937; border-top:4px solid {spike_color};
                     border-radius:8px; padding:16px 24px; min-width:260px; text-align:center;
                     box-shadow:0 4px 6px rgba(0,0,0,0.3);">
             <div style="color:#9CA3AF; font-size:0.75rem; letter-spacing:1px;">SPIKES</div>
             <div style="color:{spike_color}; font-size:1.8rem; font-weight:bold; font-family:monospace;">{spike_pct:.1f}%</div>
             <div style="color:#E5E7EB; font-size:0.8rem; font-family:monospace;">{spike_label}</div>
+        </div>
+        <div style="background:#111827; border:1px solid #1F2937; border-top:4px solid #3B82F6;
+                    border-radius:8px; padding:16px 24px; min-width:260px; text-align:center;
+                    box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+            <div style="color:#9CA3AF; font-size:0.75rem; letter-spacing:1px;">DEVELOPER LINKS</div>
+            <a href="{API_DOCS_URL}" target="_blank" rel="noopener noreferrer"
+               style="display:inline-block; margin-top:8px; color:#60A5FA; font-size:1.2rem; font-weight:bold; text-decoration:none; font-family:monospace;">
+                OPEN API DOCS ↗
+            </a>
+            <div style="color:#E5E7EB; font-size:0.8rem; font-family:monospace; margin-top:8px;">Interactive OpenAPI reference</div>
         </div>
     </div>
     <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
@@ -185,32 +198,6 @@ def _build_cluster_html() -> str:
         """
         html += card
         
-    # Add global spike status
-    spike_active = "YES" if _env._spike_active else "NO"
-    spike_factor = f"{_env._current_spike_percentage:.1f}%" if _env._spike_active else "N/A"
-    spike_color = "#EF4444" if _env._spike_active else "#10B981"
-    
-    spike_card = f"""
-    <div style="background:#111827; border: 1px solid #1F2937; border-top: 4px solid {spike_color}; 
-                border-radius: 8px; padding: 20px; width: 30%; min-width: 250px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-top: 16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
-            <h3 style="color:#F3F4F6; margin:0; font-family:monospace; font-size:1.2rem; text-transform:uppercase;">
-                &#9889; SPIKE STATUS
-            </h3>
-            <span style="background:{spike_color}22; color:{spike_color}; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:bold;">
-                {spike_active}
-            </span>
-        </div>
-        
-        <div style="display:grid; grid-template-columns: 1fr; gap: 12px;">
-            <div>
-                <div style="color:#9CA3AF; font-size:0.75rem;">CURRENT SPIKE VALUE</div>
-                <div style="color:#F3F4F6; font-size:1.5rem; font-weight:bold; font-family:monospace;">{spike_factor}</div>
-            </div>
-        </div>
-    </div>"""
-    
-    html += spike_card
     html += '</div>'
     return html
 
